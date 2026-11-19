@@ -10,6 +10,6 @@ Charts open in near-fullscreen native dialogs with default 15m and focus restora
 
 Optional integrations have a calm, accurate empty state and do not report errors merely because they are disabled. Preserve TradingView chart attribution and its footer link.
 
-Desktop workspace keeps a stable 60/40 table-to-Copilot split. Extra columns scroll inside the table and must not shrink the chart panel.
+Desktop workspace keeps a stable 60/40 table-to-alert-panel split. Extra columns scroll inside the table and must not shrink the chart panel. The automatic feed shows one market at a time with 15-minute context, 1-minute impulse and 1-hour trend.
 
 Rank highlights are configurable in Local workspace. Default is enabled at 2 places; the threshold supports 1–100. Disabling hides active feedback immediately; changing either preference resets the comparison baseline. Preserve the four-second duration and persisted settings.

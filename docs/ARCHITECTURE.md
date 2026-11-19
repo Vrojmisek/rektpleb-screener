@@ -27,6 +27,7 @@ The browser owns presentation, filters, ordering and local preferences. The Node
 | Charts and themes | `src/PriceChart.tsx`, `src/Theme.tsx` |
 | Settings and alerts | `src/settings.ts`, `src/useAlerts.ts` |
 | Optional images | `copilot-feed.mjs`, `copilot-read.py`, `src/CopilotFeed.tsx` |
+| Automatic alert charts | `market-alerts.mjs`, `src/MarketAlertFeed.tsx` |
 | Startup and release manifest | `scripts/` |
 
 The current main screen remains a substantial component. Further component extraction can improve maintenance, but a broad rewrite is intentionally outside the release hardening scope.

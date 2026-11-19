@@ -150,9 +150,9 @@ const b = async (path) => {
     const priority = !/klines|openInterest|futures\/data/.test(path);
     await binanceBudget(
       path.includes("klines")
-        ? path.includes("limit=600")
-          ? 2
-          : 10
+        ? klineWeight(
+            Number(new URLSearchParams(path.split("?")[1]).get("limit")) || 500,
+          )
         : path.includes("ticker/24hr")
           ? 40
           : path.includes("premiumIndex")
@@ -163,6 +163,11 @@ const b = async (path) => {
     return json(BINANCE + path, undefined, priority);
   },
   h = (body) => json(HYPERLIQUID, body, body.type !== "candleSnapshot");
+function klineWeight(limit) {
+  if (limit < 100) return 1;
+  if (limit < 500) return 2;
+  return limit <= 1000 ? 5 : 10;
+}
 export const windows = {
   "5m": 5,
   "15m": 15,
@@ -299,11 +304,11 @@ export async function candles(exchange, symbol, interval = "1m", limit = 1500) {
           req: {
             coin: symbol,
             interval,
-            startTime: end - 1500 * mins * 60000,
+            startTime: end - limit * mins * 60000,
             endTime: end,
           },
         });
-      return rows.map((x) => ({
+      return rows.slice(-limit).map((x) => ({
         observedAt,
         time: +x.t,
         open: +x.o,
