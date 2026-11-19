@@ -185,7 +185,7 @@ export function MarketAlertFeed({ exchange, onOpen }: MarketAlertProps) {
               ? "Scanning public exchange data…"
               : chart && signal
                 ? `Volume impulse · ${chart.symbol} · ${clock.format(signal.time)} UTC`
-                : "Market overview · waiting for a qualifying move"}
+                : "Market overview · scanning all listed pairs"}
         </div>
         {chart && (
           <article className="copilot-card market-alert-card">

@@ -103,6 +103,7 @@ export function createMarketAlertFeed({ market, candles }) {
     if (!state.has(exchange))
       state.set(exchange, {
         attempted: new Set(),
+        retries: new Set(),
         attemptedAt: 0,
         updatedAt: null,
         failed: false,
@@ -112,12 +113,11 @@ export function createMarketAlertFeed({ market, candles }) {
       });
     const feed = state.get(exchange);
     const now = Date.now();
-    if (feed.alert && now - feed.alert.signal.time >= signalLifetime)
-      feed.alert = null;
-    const snapshot = () => ({
-      chart: feed.alert ?? feed.preview,
-      updatedAt: feed.updatedAt,
-    });
+    const snapshot = () => {
+      if (feed.alert && Date.now() - feed.alert.signal.time >= signalLifetime)
+        feed.alert = null;
+      return { chart: feed.alert ?? feed.preview, updatedAt: feed.updatedAt };
+    };
     if (feed.scan) {
       // Keep the existing chart accessible to concurrent tabs during a refresh.
       return feed.updatedAt ? snapshot() : feed.scan;
@@ -135,10 +135,17 @@ export function createMarketAlertFeed({ market, candles }) {
       if (!symbols.size) throw Error("No markets available");
       for (const symbol of feed.attempted)
         if (!symbols.has(symbol)) feed.attempted.delete(symbol);
+      for (const symbol of feed.retries)
+        if (!symbols.has(symbol)) feed.retries.delete(symbol);
       if (feed.attempted.size === symbols.size) feed.attempted.clear();
-      const candidates = [...symbols]
-        .filter((symbol) => !feed.attempted.has(symbol))
-        .slice(0, scanBatchSizes[exchange]);
+      // One retry per batch leaves the remaining slots available for fresh pairs.
+      const retry = feed.retries.values().next().value;
+      const candidates = [
+        ...new Set([
+          ...(retry ? [retry] : []),
+          ...[...symbols].filter((symbol) => !feed.attempted.has(symbol)),
+        ]),
+      ].slice(0, scanBatchSizes[exchange]);
       const measured = [];
       const deadline = Date.now() + 8_000;
       for (
@@ -159,7 +166,7 @@ export function createMarketAlertFeed({ market, candles }) {
                 Date.now(),
               );
               if (!bars.length || Date.now() - bars.at(-1).time >= 6 * minute)
-                throw Error("No recent closed candles");
+                return null;
               return {
                 symbol,
                 bars,
@@ -169,11 +176,17 @@ export function createMarketAlertFeed({ market, candles }) {
         );
         let deferred = false;
         for (const [offset, result] of results.entries()) {
-          if (result.status === "fulfilled") measured.push(result.value);
-          else if (result.reason?.scanDeferred) {
-            feed.attempted.delete(candidates[index + offset]);
+          const symbol = candidates[index + offset];
+          if (result.status === "rejected" && result.reason?.scanDeferred) {
+            if (symbol !== retry) feed.attempted.delete(symbol);
             deferred = true;
+            continue;
           }
+          const wasRetry = feed.retries.delete(symbol);
+          if (result.status === "fulfilled" && result.value)
+            measured.push(result.value);
+          if (result.status === "rejected" && !wasRetry)
+            feed.retries.add(symbol);
         }
         if (deferred) break;
       }

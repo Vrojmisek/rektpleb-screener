@@ -44,6 +44,33 @@ test("every listed pair is scanned despite volume reordering and an older alert 
   assert.ok(chart.signal && Date.now() - chart.signal.time >= 8 * minute);
 });
 
+test("a delayed chart response cannot publish a signal after expiry", async (t) => {
+  const minute = 60_000;
+  const end = 1_800_000_000_000;
+  t.mock.timers.enable({ apis: ["Date"], now: end + minute - 10 });
+  const feed = createMarketAlertFeed({
+    market: async () => ({ time: Date.now(), rows: [{ symbol: "TAIL" }] }),
+    candles: async (_exchange, _symbol, interval) => {
+      if (interval === "15m") t.mock.timers.tick(20);
+      return Array.from({ length: 96 }, (_, index) => {
+        const spike = index >= 62 && index <= 66;
+        return {
+          time: end - (96 - index) * minute,
+          open: 100,
+          low: 100,
+          high: spike ? 101 : 100,
+          close: spike ? 101 : 100,
+          volume: spike ? 40 : 10,
+          quote: spike ? 4000 : 1000,
+        };
+      });
+    },
+  });
+  const { chart } = await feed("binance");
+  assert.equal(chart.symbol, "TAIL");
+  assert.equal(chart.signal, null);
+});
+
 test("local alerts serve a verified price and volume impulse without Copilot", async () => {
   const minute = 60_000;
   const end = Math.floor(Date.now() / minute) * minute;

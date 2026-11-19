@@ -162,8 +162,9 @@ async function json(url, body, priority = false, scanner = false) {
     scanner,
   );
 }
-const b = async (path, scanner = false) => {
-  const priority = !/klines|openInterest|futures\/data/.test(path);
+const b = async (path, { scanner = false, interactive = false } = {}) => {
+  const priority =
+    interactive || !/klines|openInterest|futures\/data/.test(path);
   await binanceBudget(
     path.includes("klines")
       ? klineWeight(
@@ -180,7 +181,7 @@ const b = async (path, scanner = false) => {
   return json(BINANCE + path, undefined, priority, scanner);
 };
 const hyperliquidRequests = [];
-function h(body, scanner = false, limit = 0) {
+function h(body, { scanner = false, interactive = false, limit = 0 } = {}) {
   const now = Date.now();
   while (
     hyperliquidRequests.length &&
@@ -192,12 +193,13 @@ function h(body, scanner = false, limit = 0) {
     (sum, entry) => sum + entry.weight,
     0,
   );
-  if (used + weight > (scanner ? 800 : 1100)) {
+  const priority = interactive || body.type !== "candleSnapshot";
+  if (used + weight > (scanner ? 740 : priority ? 1100 : 980)) {
     const message = "Hyperliquid rate-limit capacity is unavailable";
     return Promise.reject(scanner ? scanDeferred(message) : Error(message));
   }
   hyperliquidRequests.push({ time: now, weight });
-  return json(HYPERLIQUID, body, body.type !== "candleSnapshot", scanner);
+  return json(HYPERLIQUID, body, priority, scanner);
 }
 function klineWeight(limit) {
   if (limit < 100) return 1;
@@ -315,14 +317,14 @@ export async function candles(
   symbol,
   interval = "1m",
   limit = 1500,
-  { scanner = false } = {},
+  { scanner = false, interactive = false } = {},
 ) {
   const load = async () => {
     const observedAt = Date.now();
     if (exchange === "binance") {
       const rows = await b(
         `/fapi/v1/klines?symbol=${encodeURIComponent(symbol)}&interval=${interval}&limit=${limit}`,
-        scanner,
+        { scanner, interactive },
       );
       return rows.map((x) => ({
         observedAt,
@@ -349,8 +351,7 @@ export async function candles(
             endTime: end,
           },
         },
-        scanner,
-        limit,
+        { scanner, interactive, limit },
       );
     return rows.slice(-limit).map((x) => ({
       observedAt,

@@ -210,7 +210,11 @@ export async function createAppServer({
           );
         if (route === "candles")
           return res.end(
-            JSON.stringify(await api.candles(exchange, symbols[0], interval)),
+            JSON.stringify(
+              await api.candles(exchange, symbols[0], interval, undefined, {
+                interactive: true,
+              }),
+            ),
           );
         const result = await Promise.allSettled(
           symbols.map((s) => api.details(exchange, s)),
