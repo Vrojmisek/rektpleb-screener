@@ -1559,7 +1559,7 @@ function Screener({
             )}
           </main>
         </section>
-        <CopilotFeed />
+        <CopilotFeed exchange={exchange} onOpen={openPriceChart} />
       </div>
       {expanded && (
         <ExpandedPriceChart

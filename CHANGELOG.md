@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.0
+
+- The right-hand panel automatically detects price and volume impulses using public exchange data and displays three candlestick timeframes.
+- Scan activity is bounded and pauses when the browser tab is hidden. When no signal qualifies, the panel displays a labelled market overview.
+- The optional TRADING COPILOT image connector remains available for existing installations.
+
 ## 1.0.0 — 2026-11-16
 
 - Self-contained source release with Node 24 startup and first-run build.

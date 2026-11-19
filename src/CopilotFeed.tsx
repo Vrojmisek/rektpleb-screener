@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from "react";
+import { MarketAlertFeed, type MarketAlertProps } from "./MarketAlertFeed";
 type Chart = {
   id: string;
   symbol: string;
@@ -23,7 +24,7 @@ function stamp(time: number) {
     minute: "2-digit",
   }).format(time);
 }
-export function CopilotFeed() {
+export function CopilotFeed({ exchange, onOpen }: MarketAlertProps) {
   const dialog = useRef<HTMLDialogElement>(null),
     opener = useRef<HTMLButtonElement | null>(null),
     currentImage = useRef<HTMLButtonElement>(null);
@@ -87,6 +88,21 @@ export function CopilotFeed() {
       });
     };
   }, [lightboxOpen]);
+  if (feed?.enabled === false)
+    return (
+      <MarketAlertFeed key={exchange} exchange={exchange} onOpen={onOpen} />
+    );
+  if (!feed && !error)
+    return (
+      <aside className="copilot-feed">
+        <header className="copilot-head">
+          <h2>Market alerts</h2>
+        </header>
+        <div className="copilot-empty" role="status">
+          Checking alert source…
+        </div>
+      </aside>
+    );
   const charts = feed?.items || [];
   return (
     <aside className="copilot-feed" aria-label="TRADING COPILOT charts">
@@ -99,11 +115,7 @@ export function CopilotFeed() {
           <span className="copilot-badge">VPS</span>
         </div>
         <div className="copilot-heading-row">
-          <h2>
-            {feed?.enabled === false
-              ? "Your alert workspace"
-              : "Latest alert chart"}
-          </h2>
+          <h2>Latest alert chart</h2>
           <button
             aria-label="Refresh charts"
             title="Refresh charts"
@@ -115,11 +127,7 @@ export function CopilotFeed() {
             ↻
           </button>
         </div>
-        <p>
-          {feed?.enabled === false
-            ? "Optional connection. No credentials needed for market data."
-            : "The latest signal, always in focus."}
-        </p>
+        <p>Latest saved screenshot from your TRADING COPILOT feed.</p>
       </header>
       {error && (
         <div className="copilot-warning" role="status">
@@ -128,14 +136,9 @@ export function CopilotFeed() {
         </div>
       )}
       <div className="copilot-cards">
-        {!feed && !error && (
-          <div className="copilot-empty">Loading charts from VPS…</div>
-        )}
         {feed && !charts.length && (
           <div className="copilot-empty">
-            {feed?.enabled === false
-              ? "Connect your own TRADING COPILOT feed to see the latest alert chart here. Setup instructions are in the README."
-              : "No alert images are available yet."}
+            No alert images are available yet.
           </div>
         )}
         {charts.map((chart) => (
@@ -180,10 +183,8 @@ export function CopilotFeed() {
       <div className="copilot-foot">
         {feed?.updatedAt
           ? "Updated " + stamp(feed.updatedAt)
-          : feed?.enabled === false
-            ? "Not connected · optional"
-            : "Connecting securely to VPS"}
-        <span>{feed?.enabled === false ? "Disabled" : "↻ 30 s"}</span>
+          : "Checking alert source"}
+        <span>↻ 30 s</span>
       </div>
       {selected && (
         <dialog

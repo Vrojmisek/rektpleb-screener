@@ -30,6 +30,7 @@ export const releaseEntries = [
   "providers.mjs",
   "seconds-history.mjs",
   "market-math.mjs",
+  "market-alerts.mjs",
   "market-policy.mjs",
   "market-policy.test.mjs",
   "copilot-feed.mjs",

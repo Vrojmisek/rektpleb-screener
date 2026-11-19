@@ -6,6 +6,8 @@ import path from "node:path";
 import { market, candles, details } from "./providers.mjs";
 import { secondsHistory } from "./seconds-history.mjs";
 import { copilotIndex, copilotImage } from "./copilot-feed.mjs";
+import { createMarketAlertFeed } from "./market-alerts.mjs";
+import pkg from "./package.json" with { type: "json" };
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const intervals = new Set(["1m", "5m", "15m", "1h", "4h", "8h", "12h", "1d"]);
@@ -14,6 +16,7 @@ const routes = new Set([
   "copilot/charts",
   "copilot/image",
   "market",
+  "market-alerts",
   "details",
   "candles",
   "seconds",
@@ -48,6 +51,7 @@ export async function createAppServer({
     copilotImage,
     ...services,
   };
+  const marketAlerts = createMarketAlertFeed(api);
   const vite = dev
     ? await (
         await import("vite")
@@ -122,7 +126,7 @@ export async function createAppServer({
       if (!routes.has(route)) return fail(404, "Unknown endpoint");
       if (route === "health")
         return res.end(
-          JSON.stringify({ ok: true, local: true, version: "1.0.0" }),
+          JSON.stringify({ ok: true, local: true, version: pkg.version }),
         );
       if (Date.now() - windowStart >= 60000) {
         used = 0;
@@ -148,6 +152,8 @@ export async function createAppServer({
           throw badRequest("Invalid exchange");
         if (route === "market")
           return res.end(JSON.stringify(await api.market(exchange)));
+        if (route === "market-alerts")
+          return res.end(JSON.stringify(await marketAlerts(exchange)));
         const symbols = (
           u.searchParams.get("symbols") ||
           u.searchParams.get("symbol") ||

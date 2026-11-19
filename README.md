@@ -4,7 +4,7 @@
 
 Filter Binance and Hyperliquid by price change, volume or open interest. Open a full-screen chart from any row, or hover over an intraday return to see the exact UTC window and prices used. REKTPLEB runs on your computer with public exchange data and keeps your watchlist and settings in your browser.
 
-![Live Binance perpetual pairs with 24-hour trend charts, prices, and market metrics](docs/assets/daylight.jpg)
+![Live Binance perpetual pairs beside the automatic three-timeframe market alert panel](docs/assets/workspace.jpg)
 
 ![Full-screen BTCUSDT 15-minute candlestick chart with volume](docs/assets/chart.jpg)
 
@@ -34,6 +34,7 @@ No account, database, Docker, Python or SSH setup is needed for the screener. Py
 - Progressive second-based history with 24-hour, 3-day and 7-day requests; older data loads as available within exchange limits.
 - Persistent day/night modes and keyboard-accessible dialogs with reduced-motion support.
 - Browser notifications for configured conditions while the app is running.
+- Automatic market alert charts with 15m context, 1m impulse and 1h trend. Works with public exchange data on first launch.
 - An optional read-only TRADING COPILOT connector for the latest saved alert image.
 
 ## Data and limits
@@ -52,11 +53,15 @@ Settings, watchlists and alerts stay in your browser. Use **Local → Export set
 
 The server listens only on `127.0.0.1`. Requests from foreign websites and unrecognized hostnames are rejected. There is no analytics, hosted account system or credential collection. See [SECURITY.md](SECURITY.md) for boundaries and [the audit](docs/AUDIT.md) for verification and remaining limitations.
 
-## Optional alert images
+## Automatic market alert charts
 
-The 24-hour trend charts in the table and the full-screen candlestick charts use public exchange data and work with the default setup. The right-hand alert panel shows saved screenshots from your own TRADING COPILOT instance when you enable the connector.
+The right-hand panel scans the 24 highest-volume pairs on the selected exchange in rotating batches of six while the app is visible. An alert requires an absolute 5-minute price move of at least 0.75% and at least 2.5× relative volume. Relative volume compares the current 5-minute quote volume with the average 5-minute volume in the preceding hour. Binance supplies quote volume directly. Hyperliquid volume is estimated from base volume multiplied by each candle's close. Only consecutive closed candles can trigger a signal.
 
-The connector is **off by default**. It supports an existing TRADING COPILOT installation with `data/copilot.db` and saved PNG files in `screenshots/`.
+The newest qualifying move replaces the previous chart. After 30 minutes without a new signal, the panel returns to a labelled market overview. The scanner keeps only the current chart and overview for each exchange in memory. It requires internet access and the running local app.
+
+## Optional TRADING COPILOT images
+
+You can replace the built-in alert panel with your own saved screenshots. This connector is **off by default**. It supports an existing TRADING COPILOT installation with `data/copilot.db` and saved PNG files in `screenshots/`.
 
 1. Configure and verify an SSH alias in your own SSH configuration. Prefer a dedicated read-only account limited to the required data. Keep host-key verification enabled.
 2. Copy `.env.example` to `.env` and set:
