@@ -4,7 +4,9 @@
 
 Filter Binance and Hyperliquid by price change, volume or open interest. Open a full-screen chart from any row, or hover over an intraday return to see the exact UTC window and prices used. REKTPLEB runs on your computer with public exchange data and keeps your watchlist and settings in your browser.
 
-![REKTPLEB live market table](docs/assets/workspace.jpg)
+![Live Binance perpetual pairs with 24-hour trend charts, prices, and market metrics](docs/assets/daylight.jpg)
+
+![Full-screen BTCUSDT 15-minute candlestick chart with volume](docs/assets/chart.jpg)
 
 **No exchange account or API keys required.** Built with React, TypeScript, Node.js and TradingView Lightweight Charts.
 
@@ -52,7 +54,9 @@ The server listens only on `127.0.0.1`. Requests from foreign websites and unrec
 
 ## Optional alert images
 
-The connector is **off by default**. It does not connect to any server until explicitly enabled. It supports an existing TRADING COPILOT installation with `data/copilot.db` and saved PNG files in `screenshots/`.
+The 24-hour trend charts in the table and the full-screen candlestick charts use public exchange data and work with the default setup. The right-hand alert panel shows saved screenshots from your own TRADING COPILOT instance when you enable the connector.
+
+The connector is **off by default**. It supports an existing TRADING COPILOT installation with `data/copilot.db` and saved PNG files in `screenshots/`.
 
 1. Configure and verify an SSH alias in your own SSH configuration. Prefer a dedicated read-only account limited to the required data. Keep host-key verification enabled.
 2. Copy `.env.example` to `.env` and set:
@@ -67,7 +71,7 @@ COPILOT_ROOT=/absolute/path/to/your/copilot
 
 Do not put passwords, private keys, personal SSH configuration or alert images in the repository. The latest image replaces its predecessor; image cache is bounded to 8 MiB and expires after five minutes. Images are matched by symbol and time; ambiguous matches are omitted.
 
-[View the full-screen chart](docs/assets/chart.jpg) · [See how data is verified](docs/AUDIT.md)
+[See how data is verified](docs/AUDIT.md)
 
 ## Development
 
