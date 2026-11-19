@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.1
+
+- The automatic alert feed rotates through every supported pair on the selected exchange, including low-volume markets.
+- The scanner checks recent closed history for moves between visits and reserves exchange capacity for normal screener requests.
+
 ## 1.1.0
 
 - The right-hand panel automatically detects price and volume impulses using public exchange data and displays three candlestick timeframes.
