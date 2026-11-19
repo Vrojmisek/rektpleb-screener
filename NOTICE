@@ -1,0 +1,19 @@
+REKTPLEB screener
+
+Charts are powered by TradingView Lightweight Charts.
+TradingView Lightweight Charts(TM) v5.2.1
+Copyright (c) 2026 TradingView, Inc.
+https://www.tradingview.com/
+Licensed under the Apache License, Version 2.0.
+
+The application retains the chart attribution logo and the visible TradingView link.
+Lightweight Charts incorporates parts of tslib, (c) Microsoft Corporation,
+covered by the BSD Zero Clause license.
+
+React, React DOM and Scheduler: MIT, Meta Platforms, Inc. and affiliates.
+fancy-canvas: MIT, Copyright (c) 2019 TradingView, Inc.
+Geist fonts: Copyright 2024 The Geist Project Authors, SIL Open Font License 1.1.
+
+License texts are included in licenses/. The project MIT license does not
+replace these third-party licenses. Market data is obtained from Binance and
+Hyperliquid public APIs; provider terms and availability apply.

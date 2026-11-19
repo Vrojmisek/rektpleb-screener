@@ -1,0 +1,138 @@
+/* Keep navigation, market context and live totals together above the workspace. */
+.app-header {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  gap: 32px;
+  padding: 12px 8px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--surface-raised);
+  flex-shrink: 0;
+}
+.app-header .nav {
+  height: auto;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  gap: 20px;
+}
+.app-header .market-overview {
+  min-height: 0;
+  padding: 0;
+  gap: 24px;
+}
+.app-header .market-heading {
+  min-width: 0;
+}
+.app-header .eyebrow {
+  font-size: 9px;
+  letter-spacing: 0.07em;
+}
+.app-header .market-heading h1 {
+  margin: 4px 0;
+  font-size: 23px;
+}
+.app-header .market-heading p {
+  font-size: 10px;
+  margin: 0 0 8px;
+}
+.app-header .scope-tags {
+  gap: 4px;
+}
+.app-header .scope-tags > span {
+  padding: 3px 7px;
+  font-size: 9px;
+}
+.app-header .market-snapshot {
+  width: 380px;
+  max-width: none;
+  flex-shrink: 0;
+  padding: 0 0 0 24px;
+  background: transparent;
+  border: 0;
+  border-left: 1px solid var(--line-strong);
+  border-radius: 0;
+  box-shadow: none;
+  margin: 0;
+}
+.app-header .snapshot-top {
+  font-size: 10px;
+}
+.app-header .snapshot-period {
+  font-size: 9px;
+  padding: 2px 6px;
+}
+.app-header .snapshot-values {
+  margin: 7px 0;
+  gap: 12px;
+}
+.app-header .snapshot-values > div > span {
+  font-size: 9px;
+  margin-bottom: 3px;
+}
+.app-header .snapshot-values strong {
+  font-size: 20px;
+}
+.app-header .snapshot-caption {
+  margin-top: 5px;
+  font-size: 9px;
+}
+.screener-table-panel {
+  position: relative;
+}
+.app .screener-table-panel .popover {
+  top: 60px;
+  right: 12px;
+  max-height: calc(100% - 80px);
+  overflow-y: auto;
+}
+.app .screener-table-panel .filters-panel {
+  right: 52px;
+}
+@media (max-width: 1399px) {
+  .app-header {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+  .app-header .market-overview {
+    gap: 20px;
+  }
+  .app-header .market-snapshot {
+    width: 380px;
+  }
+}
+@media (max-width: 639px) {
+  .app-header {
+    padding: 10px 3px;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .app-header .nav {
+    gap: 10px;
+  }
+  .app-header .market-overview {
+    display: grid;
+    gap: 12px;
+  }
+  .app-header .market-heading h1 {
+    font-size: 21px;
+  }
+  .app-header .market-snapshot {
+    width: 100%;
+    padding: 0;
+    border: 0;
+  }
+  .app-header .snapshot-values {
+    grid-template-columns: 1fr 0.7fr 1.2fr;
+    margin: 5px 0;
+  }
+  .app-header .snapshot-values strong {
+    font-size: 18px;
+  }
+  .app .screener-table-panel .popover {
+    top: 90px;
+    right: 8px;
+    max-width: calc(100% - 16px);
+    max-height: calc(100% - 100px);
+  }
+}

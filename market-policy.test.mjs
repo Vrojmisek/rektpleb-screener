@@ -1,0 +1,10 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {isCryptoBinance,isCryptoHyperliquid} from './market-policy.mjs';
+const btc={symbol:'BTCUSDT',baseAsset:'BTC',quoteAsset:'USDT',status:'TRADING',contractType:'PERPETUAL',underlyingType:'COIN'};
+test('keeps ordinary crypto and RWA protocol tokens',()=>{assert.equal(isCryptoBinance(btc),true);assert.equal(isCryptoBinance({...btc,symbol:'ONDOUSDT',baseAsset:'ONDO'}),true)});
+test('removes USDC on either side',()=>{assert.equal(isCryptoBinance({...btc,symbol:'BTCUSDC',quoteAsset:'USDC'}),false);assert.equal(isCryptoBinance({...btc,symbol:'USDCUSDT',baseAsset:'USDC'}),false)});
+test('removes TradFi, stocks, commodities, FX, indices and expired contracts',()=>{for(const underlyingType of ['EQUITY','COMMODITY','FX','INDEX','KR_EQUITY','HK_EQUITY','CN_EQUITY'])assert.equal(isCryptoBinance({...btc,underlyingType}),false);assert.equal(isCryptoBinance({...btc,contractType:'TRADIFI_PERPETUAL'}),false);assert.equal(isCryptoBinance({...btc,contractType:'CURRENT_QUARTER'}),false);assert.equal(isCryptoBinance({...btc,status:'SETTLING'}),false)});
+test('removes gold-backed tokens even when classified as COIN',()=>{for(const baseAsset of ['PAXG','XAUT'])assert.equal(isCryptoBinance({...btc,baseAsset}),false)});
+test('Hyperliquid keeps real crypto including SPX meme token',()=>{for(const name of ['BTC','ETH','HYPE','kPEPE','SPX','ONDO'])assert.equal(isCryptoHyperliquid({name}),true)});
+test('Hyperliquid excludes HIP-3, gold and USDC pairs',()=>{for(const name of ['xyz:NVDA','xyz:CL','xyz:SP500','PAXG','XAUT','BTCUSDC'])assert.equal(isCryptoHyperliquid({name}),false);assert.equal(isCryptoHyperliquid({name:'BTC',isDelisted:true}),false)});

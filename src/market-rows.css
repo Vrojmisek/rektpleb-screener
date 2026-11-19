@@ -1,0 +1,45 @@
+/* Fit roughly ten readable markets to the actual available table height. */
+.market-table > tbody > tr > td {
+  height: var(--market-row-height, 96px);
+  font-size: clamp(14px, calc(var(--market-row-height, 96px) / 6), 18px);
+  line-height: 1.4;
+}
+.market-table .symbol-cell button {
+  height: calc(var(--market-row-height, 96px) - 1px);
+  font-size: inherit;
+  gap: 8px;
+}
+.market-table .symbol-cell strong {
+  min-width: 0;
+  font-weight: 600;
+}
+.market-table tbody .coin {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  font-size: 11px;
+}
+.market-table tbody .spark {
+  height: 48px;
+  max-height: calc(var(--market-row-height, 96px) - 16px);
+}
+.market-table tbody .pin-chart,
+.market-table tbody .pin-star {
+  padding: 0 2px;
+}
+.market-table tbody .pin-chart button,
+.market-table tbody .pin-star button {
+  width: 20px;
+  min-height: 40px;
+  padding: 0;
+}
+.market-table tbody .pin-chart svg,
+.market-table tbody .pin-star svg {
+  width: 18px;
+  height: 18px;
+}
+.market-table .rank-delta {
+  font-size: 12px;
+  min-width: 36px;
+  padding: 4px 5px;
+}
