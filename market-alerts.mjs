@@ -1,7 +1,8 @@
 const minute = 60_000;
-const scanInterval = 55_000;
-const batchSize = 6;
-const marketCount = 24;
+const scanInterval = 9_500;
+const scanBatchSizes = { binance: 24, hl: 4 };
+const scanConcurrency = 2;
+const scanHistory = 96;
 const signalLifetime = 30 * minute;
 const overviewLifetime = 5 * minute;
 const frameBars = 48;
@@ -27,14 +28,12 @@ function closedBars(bars, minutes, now) {
 }
 
 function findSignal(bars, now, exchange) {
-  // Recheck recent closed windows so a pair outside this minute's batch can still qualify.
-  for (let offset = 0; offset <= 4; offset++) {
-    const end = bars.length - offset;
-    if (end < 65) break;
+  // Search closed windows across the rotation, including moves between visits.
+  for (let end = bars.length; end >= 65; end--) {
     const window = bars.slice(end - 65, end);
     const time = window.at(-1).time + minute;
+    if (now - time >= signalLifetime) break;
     if (
-      now - time >= 6 * minute ||
       !window.every(
         (bar, index) => bar.time === window[0].time + index * minute,
       )
@@ -88,6 +87,7 @@ export function createMarketAlertFeed({ market, candles }) {
             chart.symbol,
             interval,
             frameBars + 1,
+            { scanner: true },
           );
           frames[interval] = chartBars(
             closedBars(bars, minutes, chart.capturedAt),
@@ -102,7 +102,8 @@ export function createMarketAlertFeed({ market, candles }) {
   return async function marketAlerts(exchange) {
     if (!state.has(exchange))
       state.set(exchange, {
-        offset: 0,
+        attempted: new Set(),
+        retries: new Set(),
         attemptedAt: 0,
         updatedAt: null,
         failed: false,
@@ -112,12 +113,11 @@ export function createMarketAlertFeed({ market, candles }) {
       });
     const feed = state.get(exchange);
     const now = Date.now();
-    if (feed.alert && now - feed.alert.signal.time >= signalLifetime)
-      feed.alert = null;
-    const snapshot = () => ({
-      chart: feed.alert ?? feed.preview,
-      updatedAt: feed.updatedAt,
-    });
+    const snapshot = () => {
+      if (feed.alert && Date.now() - feed.alert.signal.time >= signalLifetime)
+        feed.alert = null;
+      return { chart: feed.alert ?? feed.preview, updatedAt: feed.updatedAt };
+    };
     if (feed.scan) {
       // Keep the existing chart accessible to concurrent tabs during a refresh.
       return feed.updatedAt ? snapshot() : feed.scan;
@@ -131,32 +131,65 @@ export function createMarketAlertFeed({ market, candles }) {
       const listing = await market(exchange);
       if (now - listing.time >= 120_000)
         throw Error("Market snapshot is stale");
-      const rows = listing.rows
-        .filter((row) => row.volume_1d > 0)
-        .slice(0, marketCount);
-      if (!rows.length) throw Error("No liquid markets available");
-      const offset = feed.offset < rows.length ? feed.offset : 0;
-      const candidates = rows.slice(offset, offset + batchSize);
-      feed.offset = offset + batchSize;
-      const results = await Promise.allSettled(
-        candidates.map(async ({ symbol }) => {
-          const bars = closedBars(
-            await candles(exchange, symbol, "1m", 80),
-            1,
-            Date.now(),
-          );
-          if (!bars.length || Date.now() - bars.at(-1).time >= 6 * minute)
-            throw Error("No recent closed candles");
-          return {
-            symbol,
-            bars,
-            signal: findSignal(bars, Date.now(), exchange),
-          };
-        }),
-      );
-      const measured = results.flatMap((result) =>
-        result.status === "fulfilled" ? [result.value] : [],
-      );
+      const symbols = new Set(listing.rows.map((row) => row.symbol));
+      if (!symbols.size) throw Error("No markets available");
+      for (const symbol of feed.attempted)
+        if (!symbols.has(symbol)) feed.attempted.delete(symbol);
+      for (const symbol of feed.retries)
+        if (!symbols.has(symbol)) feed.retries.delete(symbol);
+      if (feed.attempted.size === symbols.size) feed.attempted.clear();
+      // One retry per batch leaves the remaining slots available for fresh pairs.
+      const retry = feed.retries.values().next().value;
+      const candidates = [
+        ...new Set([
+          ...(retry ? [retry] : []),
+          ...[...symbols].filter((symbol) => !feed.attempted.has(symbol)),
+        ]),
+      ].slice(0, scanBatchSizes[exchange]);
+      const measured = [];
+      const deadline = Date.now() + 8_000;
+      for (
+        let index = 0;
+        index < candidates.length && Date.now() < deadline;
+        index += scanConcurrency
+      ) {
+        const results = await Promise.allSettled(
+          candidates
+            .slice(index, index + scanConcurrency)
+            .map(async (symbol) => {
+              feed.attempted.add(symbol);
+              const bars = closedBars(
+                await candles(exchange, symbol, "1m", scanHistory, {
+                  scanner: true,
+                }),
+                1,
+                Date.now(),
+              );
+              if (!bars.length || Date.now() - bars.at(-1).time >= 6 * minute)
+                return null;
+              return {
+                symbol,
+                bars,
+                signal: findSignal(bars, Date.now(), exchange),
+              };
+            }),
+        );
+        let deferred = false;
+        for (const [offset, result] of results.entries()) {
+          const symbol = candidates[index + offset];
+          if (result.status === "rejected" && result.reason?.scanDeferred) {
+            if (symbol !== retry) feed.attempted.delete(symbol);
+            deferred = true;
+            continue;
+          }
+          const wasRetry = feed.retries.delete(symbol);
+          if (result.status === "fulfilled" && result.value)
+            measured.push(result.value);
+          if (result.status === "rejected" && !wasRetry)
+            feed.retries.add(symbol);
+        }
+        if (deferred) break;
+      }
       if (!measured.length)
         throw Error("Market candles are temporarily unavailable");
       const newest = measured
@@ -175,7 +208,9 @@ export function createMarketAlertFeed({ market, candles }) {
             b.signal.time - a.signal.time ||
             Math.abs(b.signal.changePercent) - Math.abs(a.signal.changePercent),
         )[0];
-      const liquid = measured.find((entry) => entry.symbol === rows[0].symbol);
+      const liquid = measured.find(
+        (entry) => entry.symbol === listing.rows[0].symbol,
+      );
       const overviewExpired =
         !feed.preview ||
         now - feed.preview.frames["1m"].at(-1).time >= overviewLifetime;

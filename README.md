@@ -55,7 +55,9 @@ The server listens only on `127.0.0.1`. Requests from foreign websites and unrec
 
 ## Automatic market alert charts
 
-The right-hand panel scans the 24 highest-volume pairs on the selected exchange in rotating batches of six while the app is visible. An alert requires an absolute 5-minute price move of at least 0.75% and at least 2.5× relative volume. Relative volume compares the current 5-minute quote volume with the average 5-minute volume in the preceding hour. Binance supplies quote volume directly. Hyperliquid volume is estimated from base volume multiplied by each candle's close. Only consecutive closed candles can trigger a signal.
+The right-hand panel scans every supported crypto perpetual pair on the selected exchange, including low-volume pairs and those hidden by table filters. It rotates through small batches while the app is visible. Coverage builds over several minutes and varies with the number of listings, exchange rate limits, and connection speed. The scanner checks recent closed history to catch moves between visits.
+
+An alert requires an absolute 5-minute price move of at least 0.75% and at least 2.5× relative volume. Relative volume compares the current 5-minute quote volume with the average 5-minute volume in the preceding hour. Binance supplies quote volume directly. Hyperliquid volume is estimated from base volume multiplied by each candle's close. Only consecutive closed candles can trigger a signal.
 
 The newest qualifying move replaces the previous chart. After 30 minutes without a new signal, the panel returns to a labelled market overview. The scanner keeps only the current chart and overview for each exchange in memory. It requires internet access and the running local app.
 

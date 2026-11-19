@@ -63,7 +63,10 @@ setInterval(() => {
 }, 60000).unref();
 let weightMinute = Date.now(),
   usedWeight = 0;
-async function binanceBudget(weight, priority = false) {
+function scanDeferred(message) {
+  return Object.assign(Error(message), { scanDeferred: true });
+}
+async function binanceBudget(weight, priority = false, scanner = false) {
   for (;;) {
     const now = Date.now();
     if (now - weightMinute >= 60000) {
@@ -71,7 +74,11 @@ async function binanceBudget(weight, priority = false) {
       weightMinute = now;
     }
     // Keep capacity for prices/funding even while history scans are queued.
-    if (usedWeight + weight > (priority ? 1500 : 1100)) {
+    if (usedWeight + weight > (scanner ? 900 : priority ? 1500 : 1100)) {
+      if (scanner)
+        throw scanDeferred(
+          "Scanner is waiting for Binance rate-limit capacity",
+        );
       await new Promise((r) =>
         setTimeout(r, Math.max(100, 60000 - (now - weightMinute))),
       );
@@ -84,9 +91,14 @@ async function binanceBudget(weight, priority = false) {
 const lanes = {
   foreground: { active: 0, waiters: [], limit: 2 },
   background: { active: 0, waiters: [], limit: 4 },
+  scanner: { active: 0, waiters: [], limit: 4 },
 };
-async function limited(fn, priority = false) {
-  const lane = priority ? lanes.foreground : lanes.background;
+async function limited(fn, priority = false, scanner = false) {
+  const lane = scanner
+    ? lanes.scanner
+    : priority
+      ? lanes.foreground
+      : lanes.background;
   if (lane.waiters.length >= 64)
     throw Error("Data queue is busy. Retry shortly.");
   if (lane.active >= lane.limit)
@@ -128,41 +140,67 @@ export async function cached(key, ttl, fn, staleWhileRevalidate = false) {
   }
   return p;
 }
-async function json(url, body, priority = false) {
-  return limited(async () => {
-    const r = await fetch(url, {
-      signal: AbortSignal.timeout(15000),
-      ...(body
-        ? {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body),
-          }
-        : {}),
-    });
-    if (!r.ok) throw Error(`Exchange returned HTTP ${r.status}`);
-    const v = await r.json();
-    if (v?.code < 0) throw Error(v.msg);
-    return v;
-  }, priority);
+async function json(url, body, priority = false, scanner = false) {
+  return limited(
+    async () => {
+      const r = await fetch(url, {
+        signal: AbortSignal.timeout(scanner ? 5000 : 15000),
+        ...(body
+          ? {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(body),
+            }
+          : {}),
+      });
+      if (!r.ok) throw Error(`Exchange returned HTTP ${r.status}`);
+      const v = await r.json();
+      if (v?.code < 0) throw Error(v.msg);
+      return v;
+    },
+    priority,
+    scanner,
+  );
 }
-const b = async (path) => {
-    const priority = !/klines|openInterest|futures\/data/.test(path);
-    await binanceBudget(
-      path.includes("klines")
-        ? klineWeight(
-            Number(new URLSearchParams(path.split("?")[1]).get("limit")) || 500,
-          )
-        : path.includes("ticker/24hr")
-          ? 40
-          : path.includes("premiumIndex")
-            ? 10
-            : 1,
-      priority,
-    );
-    return json(BINANCE + path, undefined, priority);
-  },
-  h = (body) => json(HYPERLIQUID, body, body.type !== "candleSnapshot");
+const b = async (path, { scanner = false, interactive = false } = {}) => {
+  const priority =
+    interactive || !/klines|openInterest|futures\/data/.test(path);
+  await binanceBudget(
+    path.includes("klines")
+      ? klineWeight(
+          Number(new URLSearchParams(path.split("?")[1]).get("limit")) || 500,
+        )
+      : path.includes("ticker/24hr")
+        ? 40
+        : path.includes("premiumIndex")
+          ? 10
+          : 1,
+    priority,
+    scanner,
+  );
+  return json(BINANCE + path, undefined, priority, scanner);
+};
+const hyperliquidRequests = [];
+function h(body, { scanner = false, interactive = false, limit = 0 } = {}) {
+  const now = Date.now();
+  while (
+    hyperliquidRequests.length &&
+    now - hyperliquidRequests[0].time >= 60_000
+  )
+    hyperliquidRequests.shift();
+  const weight = 20 + (limit ? Math.ceil((limit + 1) / 60) : 0);
+  const used = hyperliquidRequests.reduce(
+    (sum, entry) => sum + entry.weight,
+    0,
+  );
+  const priority = interactive || body.type !== "candleSnapshot";
+  if (used + weight > (scanner ? 740 : priority ? 1100 : 980)) {
+    const message = "Hyperliquid rate-limit capacity is unavailable";
+    return Promise.reject(scanner ? scanDeferred(message) : Error(message));
+  }
+  hyperliquidRequests.push({ time: now, weight });
+  return json(HYPERLIQUID, body, priority, scanner);
+}
 function klineWeight(limit) {
   if (limit < 100) return 1;
   if (limit < 500) return 2;
@@ -274,32 +312,37 @@ export async function market(exchange) {
   return { ...listing, details };
 }
 
-export async function candles(exchange, symbol, interval = "1m", limit = 1500) {
-  return cached(
-    `candles:${exchange}:${symbol}:${interval}:${limit}`,
-    60000,
-    async () => {
-      const observedAt = Date.now();
-      if (exchange === "binance") {
-        const rows = await b(
-          `/fapi/v1/klines?symbol=${encodeURIComponent(symbol)}&interval=${interval}&limit=${limit}`,
-        );
-        return rows.map((x) => ({
-          observedAt,
-          time: +x[0],
-          open: +x[1],
-          high: +x[2],
-          low: +x[3],
-          close: +x[4],
-          volume: +x[5],
-          quote: +x[7],
-          trades: +x[8],
-          buy: +x[10],
-        }));
-      }
-      const mins = windows[interval] || 1,
-        end = Date.now(),
-        rows = await h({
+export async function candles(
+  exchange,
+  symbol,
+  interval = "1m",
+  limit = 1500,
+  { scanner = false, interactive = false } = {},
+) {
+  const load = async () => {
+    const observedAt = Date.now();
+    if (exchange === "binance") {
+      const rows = await b(
+        `/fapi/v1/klines?symbol=${encodeURIComponent(symbol)}&interval=${interval}&limit=${limit}`,
+        { scanner, interactive },
+      );
+      return rows.map((x) => ({
+        observedAt,
+        time: +x[0],
+        open: +x[1],
+        high: +x[2],
+        low: +x[3],
+        close: +x[4],
+        volume: +x[5],
+        quote: +x[7],
+        trades: +x[8],
+        buy: +x[10],
+      }));
+    }
+    const mins = windows[interval] || 1,
+      end = Date.now(),
+      rows = await h(
+        {
           type: "candleSnapshot",
           req: {
             coin: symbol,
@@ -307,20 +350,27 @@ export async function candles(exchange, symbol, interval = "1m", limit = 1500) {
             startTime: end - limit * mins * 60000,
             endTime: end,
           },
-        });
-      return rows.slice(-limit).map((x) => ({
-        observedAt,
-        time: +x.t,
-        open: +x.o,
-        high: +x.h,
-        low: +x.l,
-        close: +x.c,
-        volume: +x.v,
-        quote: null,
-        trades: +x.n,
-        buy: null,
-      }));
-    },
+        },
+        { scanner, interactive, limit },
+      );
+    return rows.slice(-limit).map((x) => ({
+      observedAt,
+      time: +x.t,
+      open: +x.o,
+      high: +x.h,
+      low: +x.l,
+      close: +x.c,
+      volume: +x.v,
+      quote: null,
+      trades: +x.n,
+      buy: null,
+    }));
+  };
+  if (scanner) return load();
+  return cached(
+    `candles:${exchange}:${symbol}:${interval}:${limit}`,
+    60000,
+    load,
   );
 }
 function sum(a, key) {

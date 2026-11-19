@@ -139,7 +139,7 @@ export function MarketAlertFeed({ exchange, onOpen }: MarketAlertProps) {
       }
     }
     void refresh();
-    const timer = setInterval(refresh, 60_000);
+    const timer = setInterval(refresh, 10_000);
     document.addEventListener("visibilitychange", refresh);
     return () => {
       controller.abort();
@@ -185,7 +185,7 @@ export function MarketAlertFeed({ exchange, onOpen }: MarketAlertProps) {
               ? "Scanning public exchange data…"
               : chart && signal
                 ? `Volume impulse · ${chart.symbol} · ${clock.format(signal.time)} UTC`
-                : "Market overview · waiting for a qualifying move"}
+                : "Market overview · scanning all listed pairs"}
         </div>
         {chart && (
           <article className="copilot-card market-alert-card">
@@ -229,7 +229,7 @@ export function MarketAlertFeed({ exchange, onOpen }: MarketAlertProps) {
         {chart
           ? `Chart captured ${clock.format(chart.capturedAt)} UTC`
           : "Public exchange data"}
-        <span>1 min refresh</span>
+        <span>All listed pairs</span>
       </div>
     </aside>
   );

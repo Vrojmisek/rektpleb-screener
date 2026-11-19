@@ -4,6 +4,73 @@ import { once } from "node:events";
 import { createAppServer } from "../server.mjs";
 import { createMarketAlertFeed } from "../market-alerts.mjs";
 
+test("every listed pair is scanned despite volume reordering and an older alert can still qualify", async (t) => {
+  const minute = 60_000;
+  t.mock.timers.enable({ apis: ["Date"], now: 1_800_000_000_000 });
+  const listed = Array.from({ length: 52 }, (_, index) => ({
+    symbol: `PAIR${index}`,
+    volume_1d: index === 51 ? 0 : 1e9 - index,
+  }));
+  const checked = new Set();
+  const feed = createMarketAlertFeed({
+    market: async () => ({ time: Date.now(), rows: [...listed] }),
+    candles: async (_exchange, symbol, interval) => {
+      if (interval === "1m") checked.add(symbol);
+      const duration =
+        (interval === "1h" ? 60 : interval === "15m" ? 15 : 1) * minute;
+      const end = Math.floor(Date.now() / duration) * duration;
+      return Array.from({ length: 96 }, (_, index) => {
+        const spike = symbol === "PAIR51" && index >= 83 && index <= 87;
+        return {
+          time: end - (96 - index) * duration,
+          open: 100,
+          low: 100,
+          high: spike ? 101 : 100,
+          close: spike ? 101 : 100,
+          volume: spike ? 30 : 10,
+          quote: spike ? 3000 : 1000,
+        };
+      });
+    },
+  });
+  for (let index = 0; index < 3; index++) {
+    await feed("binance");
+    listed.unshift(listed.pop());
+    t.mock.timers.tick(10_000);
+  }
+  assert.equal(checked.size, listed.length);
+  const { chart } = await feed("binance");
+  assert.equal(chart.symbol, "PAIR51");
+  assert.ok(chart.signal && Date.now() - chart.signal.time >= 8 * minute);
+});
+
+test("a delayed chart response cannot publish a signal after expiry", async (t) => {
+  const minute = 60_000;
+  const end = 1_800_000_000_000;
+  t.mock.timers.enable({ apis: ["Date"], now: end + minute - 10 });
+  const feed = createMarketAlertFeed({
+    market: async () => ({ time: Date.now(), rows: [{ symbol: "TAIL" }] }),
+    candles: async (_exchange, _symbol, interval) => {
+      if (interval === "15m") t.mock.timers.tick(20);
+      return Array.from({ length: 96 }, (_, index) => {
+        const spike = index >= 62 && index <= 66;
+        return {
+          time: end - (96 - index) * minute,
+          open: 100,
+          low: 100,
+          high: spike ? 101 : 100,
+          close: spike ? 101 : 100,
+          volume: spike ? 40 : 10,
+          quote: spike ? 4000 : 1000,
+        };
+      });
+    },
+  });
+  const { chart } = await feed("binance");
+  assert.equal(chart.symbol, "TAIL");
+  assert.equal(chart.signal, null);
+});
+
 test("local alerts serve a verified price and volume impulse without Copilot", async () => {
   const minute = 60_000;
   const end = Math.floor(Date.now() / minute) * minute;
@@ -145,20 +212,20 @@ test("a failed batch cannot starve other markets and missing frames retry", asyn
   const feed = createMarketAlertFeed({
     market: async () => ({
       time: Date.now(),
-      rows: Array.from({ length: 7 }, (_, index) => ({
+      rows: Array.from({ length: 25 }, (_, index) => ({
         symbol: `PAIR${index}`,
         volume_1d: 1e9 - index,
       })),
     }),
     candles: async (_exchange, symbol, interval) => {
-      if (symbol !== "PAIR6" && firstBatchUnavailable)
+      if (symbol !== "PAIR24" && firstBatchUnavailable)
         throw Error("First batch unavailable");
       if (interval === "1h" && hourlyUnavailable) throw Error("Timeout");
       const duration =
         (interval === "15m" ? 15 : interval === "1h" ? 60 : 1) * minute;
       const end = Math.floor(Date.now() / duration) * duration;
-      return Array.from({ length: 70 }, (_, index) => {
-        const spike = symbol === "PAIR6" && index >= 65;
+      return Array.from({ length: 250 }, (_, index) => {
+        const spike = symbol === "PAIR24" && index >= 65;
         return {
           time: end - (70 - index) * duration,
           open: 100,
@@ -174,7 +241,7 @@ test("a failed batch cannot starve other markets and missing frames retry", asyn
   await assert.rejects(feed("binance"), /temporarily unavailable/);
   t.mock.timers.tick(minute);
   const partial = (await feed("binance")).chart;
-  assert.equal(partial.symbol, "PAIR6");
+  assert.equal(partial.symbol, "PAIR24");
   assert.ok(partial.signal);
   assert.equal(partial.frames["1h"].length, 0);
   firstBatchUnavailable = hourlyUnavailable = false;
