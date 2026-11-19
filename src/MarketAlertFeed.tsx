@@ -13,6 +13,7 @@ type Feed = {
   updatedAt: number;
   chart: {
     symbol: string;
+    capturedAt: number;
     signal: {
       time: number;
       changePercent: number;
@@ -109,7 +110,7 @@ function PreviewFrame({
 
 export function MarketAlertFeed({ exchange, onOpen }: MarketAlertProps) {
   const [feed, setFeed] = useState<Feed | null>(null);
-  const [failed, setFailed] = useState(false);
+  const [failedAt, setFailedAt] = useState(0);
   const [retry, setRetry] = useState(0);
 
   useEffect(() => {
@@ -129,10 +130,10 @@ export function MarketAlertFeed({ exchange, onOpen }: MarketAlertProps) {
         const data: Feed = await response.json();
         if (!controller.signal.aborted) {
           setFeed(data);
-          setFailed(false);
+          setFailedAt(0);
         }
       } catch {
-        if (!controller.signal.aborted) setFailed(true);
+        if (!controller.signal.aborted) setFailedAt(Date.now());
       } finally {
         busy = false;
       }
@@ -147,7 +148,11 @@ export function MarketAlertFeed({ exchange, onOpen }: MarketAlertProps) {
     };
   }, [exchange, retry]);
 
-  const chart = feed?.chart;
+  const previousChart = feed?.chart;
+  const expired =
+    previousChart?.signal &&
+    failedAt - previousChart.signal.time >= 30 * 60_000;
+  const chart = expired ? null : previousChart;
   const signal = chart?.signal;
   return (
     <aside
@@ -172,7 +177,7 @@ export function MarketAlertFeed({ exchange, onOpen }: MarketAlertProps) {
       </header>
       <div className="copilot-cards">
         <div className="market-alert-status" role="status">
-          {failed
+          {failedAt
             ? chart
               ? "Scanner unavailable. Showing the last chart."
               : "Scanner unavailable. Retrying automatically."
@@ -221,8 +226,8 @@ export function MarketAlertFeed({ exchange, onOpen }: MarketAlertProps) {
         )}
       </div>
       <div className="copilot-foot">
-        {feed?.updatedAt
-          ? `Checked ${clock.format(feed.updatedAt)} UTC`
+        {chart
+          ? `Chart captured ${clock.format(chart.capturedAt)} UTC`
           : "Public exchange data"}
         <span>1 min refresh</span>
       </div>

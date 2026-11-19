@@ -3,6 +3,7 @@ const scanInterval = 55_000;
 const batchSize = 6;
 const marketCount = 24;
 const signalLifetime = 30 * minute;
+const overviewLifetime = 5 * minute;
 const frameBars = 48;
 const moveThreshold = 0.75;
 const volumeThreshold = 2.5;
@@ -73,12 +74,38 @@ function chartBars(bars) {
 
 export function createMarketAlertFeed({ market, candles }) {
   const state = new Map();
+  async function fillFrames(exchange, chart) {
+    const frames = { ...chart.frames };
+    await Promise.all(
+      [
+        ["15m", 15],
+        ["1h", 60],
+      ].map(async ([interval, minutes]) => {
+        if (frames[interval].length) return;
+        try {
+          const bars = await candles(
+            exchange,
+            chart.symbol,
+            interval,
+            frameBars + 1,
+          );
+          frames[interval] = chartBars(
+            closedBars(bars, minutes, chart.capturedAt),
+          );
+        } catch {
+          // A failed timeframe can recover on the next scan without changing the signal.
+        }
+      }),
+    );
+    return { ...chart, frames };
+  }
   return async function marketAlerts(exchange) {
     if (!state.has(exchange))
       state.set(exchange, {
         offset: 0,
         attemptedAt: 0,
         updatedAt: null,
+        failed: false,
         preview: null,
         alert: null,
         scan: null,
@@ -96,7 +123,7 @@ export function createMarketAlertFeed({ market, candles }) {
       return feed.updatedAt ? snapshot() : feed.scan;
     }
     if (now - feed.attemptedAt < scanInterval) {
-      if (!feed.updatedAt) throw Error("Market scanner is waiting to retry");
+      if (feed.failed) throw Error("Market scanner is waiting to retry");
       return snapshot();
     }
     feed.attemptedAt = now;
@@ -110,6 +137,7 @@ export function createMarketAlertFeed({ market, candles }) {
       if (!rows.length) throw Error("No liquid markets available");
       const offset = feed.offset < rows.length ? feed.offset : 0;
       const candidates = rows.slice(offset, offset + batchSize);
+      feed.offset = offset + batchSize;
       const results = await Promise.allSettled(
         candidates.map(async ({ symbol }) => {
           const bars = closedBars(
@@ -132,46 +160,56 @@ export function createMarketAlertFeed({ market, candles }) {
       if (!measured.length)
         throw Error("Market candles are temporarily unavailable");
       const newest = measured
-        .filter(
-          (entry) =>
-            entry.signal && entry.signal.time > (feed.alert?.signal.time ?? 0),
-        )
+        .filter(({ signal }) => {
+          if (!signal) return false;
+          const current = feed.alert?.signal;
+          return (
+            !current ||
+            signal.time > current.time ||
+            (signal.time === current.time &&
+              Math.abs(signal.changePercent) > Math.abs(current.changePercent))
+          );
+        })
         .sort(
           (a, b) =>
             b.signal.time - a.signal.time ||
             Math.abs(b.signal.changePercent) - Math.abs(a.signal.changePercent),
         )[0];
       const liquid = measured.find((entry) => entry.symbol === rows[0].symbol);
-      const selected = newest || liquid || (feed.preview ? null : measured[0]);
+      const overviewExpired =
+        !feed.preview ||
+        now - feed.preview.frames["1m"].at(-1).time >= overviewLifetime;
+      const selected =
+        newest || liquid || (overviewExpired ? measured[0] : null);
       if (selected) {
-        const higherFrames = await Promise.allSettled([
-          candles(exchange, selected.symbol, "15m", frameBars + 1),
-          candles(exchange, selected.symbol, "1h", frameBars + 1),
-        ]);
-        const frame = (result, minutes) =>
-          result.status === "fulfilled"
-            ? chartBars(closedBars(result.value, minutes, Date.now()))
-            : [];
-        const chart = {
+        const chart = await fillFrames(exchange, {
           symbol: selected.symbol,
           signal: newest?.signal ?? null,
+          capturedAt: Date.now(),
           frames: {
             "1m": chartBars(selected.bars),
-            "15m": frame(higherFrames[0], 15),
-            "1h": frame(higherFrames[1], 60),
+            "15m": [],
+            "1h": [],
           },
-        };
+        });
         if (newest) {
           feed.alert = chart;
           if (!feed.preview) feed.preview = { ...chart, signal: null };
         } else feed.preview = chart;
       }
-      feed.offset = offset + batchSize;
+      if (feed.alert && !newest)
+        feed.alert = await fillFrames(exchange, feed.alert);
       feed.updatedAt = Date.now();
+      feed.failed = false;
       return snapshot();
-    })().finally(() => {
-      feed.scan = null;
-    });
+    })()
+      .catch((error) => {
+        feed.failed = true;
+        throw error;
+      })
+      .finally(() => {
+        feed.scan = null;
+      });
     return feed.scan;
   };
 }

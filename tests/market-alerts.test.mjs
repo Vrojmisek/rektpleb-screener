@@ -136,3 +136,50 @@ test("the next scan replaces an alert and the overview returns after expiry", as
   assert.equal(overview.symbol, "FIRST");
   assert.equal(overview.signal, null);
 });
+
+test("a failed batch cannot starve other markets and missing frames retry", async (t) => {
+  const minute = 60_000;
+  t.mock.timers.enable({ apis: ["Date"], now: 1_800_000_000_000 });
+  let firstBatchUnavailable = true;
+  let hourlyUnavailable = true;
+  const feed = createMarketAlertFeed({
+    market: async () => ({
+      time: Date.now(),
+      rows: Array.from({ length: 7 }, (_, index) => ({
+        symbol: `PAIR${index}`,
+        volume_1d: 1e9 - index,
+      })),
+    }),
+    candles: async (_exchange, symbol, interval) => {
+      if (symbol !== "PAIR6" && firstBatchUnavailable)
+        throw Error("First batch unavailable");
+      if (interval === "1h" && hourlyUnavailable) throw Error("Timeout");
+      const duration =
+        (interval === "15m" ? 15 : interval === "1h" ? 60 : 1) * minute;
+      const end = Math.floor(Date.now() / duration) * duration;
+      return Array.from({ length: 70 }, (_, index) => {
+        const spike = symbol === "PAIR6" && index >= 65;
+        return {
+          time: end - (70 - index) * duration,
+          open: 100,
+          low: 100,
+          high: spike ? 101 : 100,
+          close: spike ? 101 : 100,
+          volume: spike ? 30 : 10,
+          quote: spike ? 3000 : 1000,
+        };
+      });
+    },
+  });
+  await assert.rejects(feed("binance"), /temporarily unavailable/);
+  t.mock.timers.tick(minute);
+  const partial = (await feed("binance")).chart;
+  assert.equal(partial.symbol, "PAIR6");
+  assert.ok(partial.signal);
+  assert.equal(partial.frames["1h"].length, 0);
+  firstBatchUnavailable = hourlyUnavailable = false;
+  t.mock.timers.tick(minute);
+  const recovered = (await feed("binance")).chart;
+  assert.deepEqual(recovered.signal, partial.signal);
+  assert.ok(recovered.frames["1h"].length > 0);
+});
